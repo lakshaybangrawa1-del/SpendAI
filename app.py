@@ -9,13 +9,13 @@ import plotly.express as px
 import sqlite3
 import re
 import hashlib
+import datetime
 from streamlit_mic_recorder import speech_to_text
 
 load_dotenv()
 
 st.set_page_config(page_title="SpendAI Secure", layout="wide", initial_sidebar_state="collapsed")
 
-# --- INITIALIZE DATABASE MATRIX ---
 def init_auth_db():
     conn = sqlite3.connect("spendai.db")
     cursor = conn.cursor()
@@ -35,7 +35,6 @@ def init_auth_db():
 init_db()
 init_auth_db()
 
-# --- HELPER SECURITY FUNCTIONS ---
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
@@ -90,23 +89,19 @@ def delete_expense_inline(expense_id, username):
     except:
         return False
 
-# --- AUTOMATED SMS REGEX PARSER LAYER ---
 def parse_banking_sms(sms_text):
     sms_text_lower = sms_text.lower()
     
-    # Extract Amount (Matches ₹, Rs, INR followed by numbers/decimals)
     amount_match = re.search(r'(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)', sms_text_lower)
     amount = 0.0
     if amount_match:
         amount = float(amount_match.group(1).replace(',', ''))
         
-    # Extract Vendor / Description (Matches "to [vendor]" or "vpa [vendor]")
     vendor_match = re.search(r'(?:to|at|vpa)\s+([a-zA-Z0-9\s\.\@\-]+?)(?:\s+on|\s+via|\s+balance|\.|$)', sms_text_lower)
     description = "Automated SMS Log"
     if vendor_match:
         description = f"UPI: {vendor_match.group(1).strip().upper()}"
         
-    # Smart Category Mapping
     categories = {
         'food': ['swiggy', 'zomato', 'restaurant', 'dhaba', 'kfc', 'mcd'],
         'fuel': ['pump', 'petroleum', 'hpcl', 'bpcl', 'iocl', 'fuel'],
@@ -127,7 +122,6 @@ def parse_banking_sms(sms_text):
         'date': pd.Timestamp.now().strftime('%Y-%m-%d')
     }
 
-# --- ASSETS STREAM ---
 def get_base64_image(image_path):
     with open(image_path, "rb") as img_file:
         return base64.b64encode(img_file.read()).decode()
@@ -138,52 +132,60 @@ base64_string = get_base64_image(bg_image_path) if os.path.exists(bg_image_path)
 css_style = """
     <style>
     .stApp {
-        background: linear-gradient(rgba(14, 15, 18, 0.8), rgba(14, 15, 18, 0.9)), 
-                    url("data:image/png;base64,PLACEHOLDER_BG") no-repeat center center fixed !important;
-        background-size: cover !important;
-        color: #E2E8F0 !important;
+        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #020617 100%) !important;
+        color: #f8fafc !important;
         font-family: 'Inter', sans-serif;
     }
     .stTabs [data-baseweb="tab-list"] {
         gap: 15px;
-        background-color: rgba(15, 23, 42, 0.95);
+        background: rgba(30, 41, 59, 0.45);
+        backdrop-filter: blur(12px);
         padding: 10px;
         border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.08);
     }
     .stTabs [data-baseweb="tab"] {
-        color: #94A3B8 !important;
+        color: #94a3b8 !important;
         font-weight: 700;
         padding: 10px 25px;
     }
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #38BDF8 0%, #0369A1 100%) !important;
+        background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%) !important;
         color: #FFFFFF !important;
         border-radius: 8px;
     }
     section[data-testid="stFileUploader"] {
-        background-color: rgba(15, 23, 42, 0.95);
-        border: 2px dashed #38BDF8 !important;
+        background: rgba(30, 41, 59, 0.35);
+        border: 2px dashed #38bdf8 !important;
         border-radius: 16px;
         padding: 25px;
-        box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
     }
     .stDataFrame, div[data-testid="stMetricValue"], .metric-card, .auth-container {
-        background-color: rgba(15, 23, 42, 0.95);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(30, 41, 59, 0.45) !important;
+        backdrop-filter: blur(12px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
         border-radius: 12px;
         padding: 20px;
     }
-    .stButton>button {
-        background: linear-gradient(135deg, #34D399 0%, #059669 100%) !important;
-        color: #FFFFFF !important;
+    div[data-testid="stMetricValue"] {
+        font-size: 2.2rem !important;
         font-weight: 700 !important;
+        color: #38bdf8 !important;
+    }
+    .stButton>button {
+        background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%) !important;
+        color: #FFFFFF !important;
+        font-weight: 600 !important;
         font-size: 16px !important;
         width: 100%;
         border: none !important;
-        border-radius: 10px !important;
-        padding: 12px 0 !important;
-        box-shadow: 0 4px 15px rgba(52, 211, 153, 0.3);
+        border-radius: 8px !important;
+        padding: 10px 0 !important;
+        transition: all 0.3s ease !important;
+    }
+    .stButton>button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3) !important;
     }
     .stDownloadButton>button {
         background: linear-gradient(135deg, #60A5FA 0%, #2563EB 100%) !important;
@@ -200,15 +202,15 @@ css_style = """
         border: none !important;
     }
     .speech-box {
-        background-color: rgba(15, 23, 42, 0.95);
-        border: 1px solid #38BDF8;
+        background: rgba(30, 41, 59, 0.45);
+        border: 1px solid #38bdf8;
         border-radius: 12px;
         padding: 15px;
         margin-bottom: 20px;
         text-align: center;
     }
     </style>
-""".replace("PLACEHOLDER_BG", base64_string)
+"""
 
 st.markdown(css_style, unsafe_allow_html=True)
 
@@ -233,7 +235,30 @@ def parse_voice_text(text):
         'date': pd.Timestamp.now().strftime('%Y-%m-%d')
     }
 
-# --- SCREEN GATE LAYER ---
+def show_welcome_banner(username):
+    current_hour = datetime.datetime.now().hour
+    if current_hour < 12:
+        greeting = "Good Morning ☀️"
+    elif current_hour < 17:
+        greeting = "Good Afternoon 🌤️"
+    else:
+        greeting = "Good Evening 🌙"
+        
+    st.markdown(f"""
+        <div style="background: linear-gradient(90deg, rgba(37,99,235,0.2) 0%, rgba(56,189,248,0.05) 100%); 
+                    padding: 20px; border-left: 5px solid #38bdf8; border-radius: 8px; margin-bottom: 25px;">
+            <p style="margin: 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; color: #94a3b8;">
+                {greeting}
+            </p>
+            <h1 style="margin: 5px 0 0 0; font-size: 2.2rem; font-weight: 800; color: #ffffff;">
+                Welcome Back, <span style="color: #38bdf8;">{username}</span>!
+            </h1>
+            <p style="margin: 5px 0 0 0; font-size: 0.95rem; color: #cbd5e1;">
+                Your AI-Powered financial intelligence ledger is completely synchronized.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+
 if not st.session_state['authenticated']:
     st.title("🔒 SpendAI Security Gate")
     
@@ -268,6 +293,8 @@ if not st.session_state['authenticated']:
 else:
     current_user = st.session_state['username']
     
+    show_welcome_banner(current_user)
+    
     col_h1, col_h2 = st.columns([8, 2])
     with col_h1:
         st.title(f"📊 SpendAI Dashboard — [Agent: {current_user}]")
@@ -278,7 +305,6 @@ else:
             st.session_state['username'] = ""
             st.rerun()
 
-    # Added 3rd tab for Automated Bank SMS Simulator
     tab1, tab2, tab3 = st.tabs(["📥 Scan & Voice Input", "📱 SMS Telemetry Simulator", "📈 Dashboard Matrix"])
 
     with tab1:
@@ -355,7 +381,6 @@ else:
                         del st.session_state['uploader_matrix']
                     st.rerun()
 
-    # --- NEW FEATURE TAB: SMS TELEMETRY SIMULATOR ---
     with tab2:
         st.subheader("📱 Bank Transaction SMS Parsing Engine (Android Emulator)")
         st.write("Paste an official bank transaction alert format text to trigger automated script extraction:")
@@ -368,7 +393,6 @@ else:
                 with st.spinner("Compiling Token String Vectors..."):
                     parsed_sms = parse_banking_sms(sms_input)
                     st.session_state['scanned_data'] = parsed_sms
-                    # Shift instantly to tab1 preview module for verification logic
                     st.success("Regex extraction complete! Redirected parameters to validation frame.")
                     st.rerun()
 
