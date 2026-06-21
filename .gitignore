@@ -1,0 +1,16 @@
+# Python virtual environment ko ignore karne ke liye (kyunki ye bohot bhari folder hota hai)
+env/
+venv/
+__pycache__/
+*.pyc
+
+# Personal configuration aur API keys secure rakhne ke liye
+.env
+
+# Local database ledger file ko ignore karne ke liye
+*.db
+*.sqlite3
+
+# System files
+.DS_Store
+Thumbs.db
