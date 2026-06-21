@@ -60,6 +60,18 @@ def register_user_db(username, password):
     conn.close()
     return success
 
+def purge_agent_complete(username):
+    try:
+        conn = sqlite3.connect("spendai.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM expenses WHERE username = ?", (username,))
+        cursor.execute("DELETE FROM users WHERE username = ?", (username,))
+        conn.commit()
+        conn.close()
+        return True
+    except:
+        return False
+
 def get_user_expenses(username):
     conn = sqlite3.connect("spendai.db")
     cursor = conn.cursor()
@@ -91,30 +103,25 @@ def delete_expense_inline(expense_id, username):
 
 def parse_banking_sms(sms_text):
     sms_text_lower = sms_text.lower()
-    
     amount_match = re.search(r'(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)', sms_text_lower)
     amount = 0.0
     if amount_match:
         amount = float(amount_match.group(1).replace(',', ''))
-        
     vendor_match = re.search(r'(?:to|at|vpa)\s+([a-zA-Z0-9\s\.\@\-]+?)(?:\s+on|\s+via|\s+balance|\.|$)', sms_text_lower)
     description = "Automated SMS Log"
     if vendor_match:
         description = f"UPI: {vendor_match.group(1).strip().upper()}"
-        
     categories = {
         'food': ['swiggy', 'zomato', 'restaurant', 'dhaba', 'kfc', 'mcd'],
         'fuel': ['pump', 'petroleum', 'hpcl', 'bpcl', 'iocl', 'fuel'],
         'shopping': ['amazon', 'flipkart', 'myntra', 'blinkit', 'zepto'],
         'travel': ['uber', 'ola', 'rapido', 'irctc', 'metro']
     }
-    
     detected_cat = "Other"
     for cat, keywords in categories.items():
         if any(kw in sms_text_lower for kw in keywords):
             detected_cat = cat.capitalize()
             break
-            
     return {
         'amount': amount,
         'category': detected_cat,
@@ -143,6 +150,7 @@ css_style = """
         padding: 10px;
         border-radius: 12px;
         border: 1px solid rgba(255, 255, 255, 0.08);
+        margin-bottom: 20px;
     }
     .stTabs [data-baseweb="tab"] {
         color: #94a3b8 !important;
@@ -168,7 +176,7 @@ css_style = """
         padding: 20px;
     }
     div[data-testid="stMetricValue"] {
-        font-size: 2.2rem !important;
+        font-size: 1.8rem !important;
         font-weight: 700 !important;
         color: #38bdf8 !important;
     }
@@ -176,7 +184,7 @@ css_style = """
         background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%) !important;
         color: #FFFFFF !important;
         font-weight: 600 !important;
-        font-size: 16px !important;
+        font-size: 15px !important;
         width: 100%;
         border: none !important;
         border-radius: 8px !important;
@@ -208,6 +216,12 @@ css_style = """
         padding: 15px;
         margin-bottom: 20px;
         text-align: center;
+    }
+    .dashboard-title h2 {
+        font-size: 1.6rem !important;
+        font-weight: 700 !important;
+        color: #ffffff !important;
+        margin: 0 !important;
     }
     </style>
 """
@@ -246,16 +260,13 @@ def show_welcome_banner(username):
         
     st.markdown(f"""
         <div style="background: linear-gradient(90deg, rgba(37,99,235,0.2) 0%, rgba(56,189,248,0.05) 100%); 
-                    padding: 20px; border-left: 5px solid #38bdf8; border-radius: 8px; margin-bottom: 25px;">
-            <p style="margin: 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; color: #94a3b8;">
+                    padding: 15px; border-left: 5px solid #38bdf8; border-radius: 8px; margin-bottom: 20px;">
+            <p style="margin: 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; color: #94a3b8;">
                 {greeting}
             </p>
-            <h1 style="margin: 5px 0 0 0; font-size: 2.2rem; font-weight: 800; color: #ffffff;">
+            <h1 style="margin: 3px 0 0 0; font-size: 1.8rem; font-weight: 800; color: #ffffff;">
                 Welcome Back, <span style="color: #38bdf8;">{username}</span>!
             </h1>
-            <p style="margin: 5px 0 0 0; font-size: 0.95rem; color: #cbd5e1;">
-                Your AI-Powered financial intelligence ledger is completely synchronized.
-            </p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -295,15 +306,56 @@ else:
     
     show_welcome_banner(current_user)
     
-    col_h1, col_h2 = st.columns([8, 2])
+    col_h1, col_h2, col_h3 = st.columns([7, 3, 2])
     with col_h1:
-        st.title(f"📊 SpendAI Dashboard — [Agent: {current_user}]")
+        st.markdown(f'<div class="dashboard-title"><h2>📊 SpendAI Dashboard — {current_user}</h2></div>', unsafe_allow_html=True)
     with col_h2:
-        st.write("")
-        if st.button("🚪 Terminates Session"):
+        st.markdown('<div class="delete-btn">', unsafe_allow_html=True)
+        if st.button("🗑️ Delete Account"):
+            if purge_agent_complete(current_user):
+                st.session_state['authenticated'] = False
+                st.session_state['username'] = ""
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+    with col_h3:
+        if st.button("🚪 Logout"):
             st.session_state['authenticated'] = False
             st.session_state['username'] = ""
             st.rerun()
+
+    st.write("---")
+    
+    user_expenses = get_user_expenses(current_user)
+    df = pd.DataFrame(user_expenses, columns=['ID', 'Amount', 'Category', 'Description', 'Date', 'Source'])
+    if not df.empty:
+        df['Date'] = pd.to_datetime(df['Date'])
+    
+    col_c1, col_c2 = st.columns([1, 1])
+    with col_c1:
+        budget_limit = st.number_input("Set Monthly Budget Limit (₹)", value=15000.0, step=1000.0)
+    with col_c2:
+        min_date = df['Date'].min().date() if not df.empty else pd.Timestamp.now().date()
+        max_date = df['Date'].max().date() if not df.empty else pd.Timestamp.now().date()
+        date_range = st.date_input("Filter Timeline Range", value=(min_date, max_date))
+        if isinstance(date_range, tuple) and len(date_range) == 2 and not df.empty:
+            start_date, end_date = date_range
+            df = df[(df['Date'].dt.date >= start_date) & (df['Date'].dt.date <= end_date)]
+
+    if not df.empty:
+        total_spend = df['Amount'].sum()
+        m1, m2, m3 = st.columns(3)
+        with m1: st.metric(label="Ledger Burn", value=f"₹{total_spend:,.2f}")
+        with m2:
+            try: top_category = df.groupby('Category')['Amount'].sum().idxmax()
+            except: top_category = "N/A"
+            st.metric(label="Highest Category", value=str(top_category))
+        with m3: st.metric(label="Logged Streams", value=str(len(df)))
+        
+        if total_spend > budget_limit: st.error(f"CRITICAL OVERBURN: Budget limit broken by ₹{total_spend - budget_limit:,.2f}!")
+        else: st.success(f"SAFE ZONE: ₹{budget_limit - total_spend:,.2f} remaining inside limit.")
+        st.progress(min(total_spend / budget_limit, 1.0))
+
+    st.write("---")
 
     tab1, tab2, tab3 = st.tabs(["📥 Scan & Voice Input", "📱 SMS Telemetry Simulator", "📈 Dashboard Matrix"])
 
@@ -397,74 +449,37 @@ else:
                     st.rerun()
 
     with tab3:
-        user_expenses = get_user_expenses(current_user)
-        if user_expenses:
-            df = pd.DataFrame(user_expenses, columns=['ID', 'Amount', 'Category', 'Description', 'Date', 'Source'])
-            df['Date'] = pd.to_datetime(df['Date'])
-            
-            st.sidebar.header("🎯 Dashboard Controls")
-            budget_limit = st.sidebar.number_input("Set Monthly Budget Limit (₹)", value=15000.0, step=1000.0)
-            
-            st.sidebar.write("---")
-            st.sidebar.subheader("📅 Filter Timeline")
-            min_date = df['Date'].min().date() if not df.empty else pd.Timestamp.now().date()
-            max_date = df['Date'].max().date() if not df.empty else pd.Timestamp.now().date()
-            
-            date_range = st.sidebar.date_input("Select Date Range", value=(min_date, max_date))
-            
-            if isinstance(date_range, tuple) and len(date_range) == 2:
-                start_date, end_date = date_range
-                df = df[(df['Date'].dt.date >= start_date) & (df['Date'].dt.date <= end_date)]
-            
-            if not df.empty:
-                total_spend = df['Amount'].sum()
+        if not df.empty:
+            col1, col2 = st.columns([1.2, 0.8])
+            with col1:
+                st.subheader("Filtered History Stream")
+                display_df = df.copy()
+                display_df['Date'] = display_df['Date'].dt.strftime('%Y-%m-%d')
+                st.dataframe(display_df.drop(columns=['ID']), use_container_width=True)
                 
-                m1, m2, m3 = st.columns(3)
-                with m1: st.metric(label="Filtered Ledger Burn", value=f"₹{total_spend:,.2f}")
-                with m2:
-                    try: top_category = df.groupby('Category')['Amount'].sum().idxmax()
-                    except: top_category = "N/A"
-                    st.metric(label="Highest Burn Category", value=str(top_category))
-                with m3: st.metric(label="Total Logged Streams", value=str(len(df)))
-                    
-                st.write("---")
-                st.subheader("⚠️ Budget Tracking Status")
-                if total_spend > budget_limit: st.error(f"CRITICAL OVERBURN: Budget limit broken by ₹{total_spend - budget_limit:,.2f}!")
-                else: st.success(f"SAFE ZONE: ₹{budget_limit - total_spend:,.2f} remaining inside limit.")
-                st.progress(min(total_spend / budget_limit, 1.0))
-                st.write("---")
+                csv = df.drop(columns=['ID']).to_csv(index=False).encode('utf-8')
+                st.download_button(label="📥 Export Filtered Ledger to CSV", data=csv, file_name=f"{current_user}_spend_ai.csv", mime="text/csv")
                 
-                col1, col2 = st.columns([1.2, 0.8])
-                with col1:
-                    st.subheader("Filtered History Stream")
-                    display_df = df.copy()
-                    display_df['Date'] = display_df['Date'].dt.strftime('%Y-%m-%d')
-                    st.dataframe(display_df.drop(columns=['ID']), use_container_width=True)
-                    
-                    csv = df.drop(columns=['ID']).to_csv(index=False).encode('utf-8')
-                    st.download_button(label="📥 Export Filtered Ledger to CSV", data=csv, file_name=f"{current_user}_spend_ai.csv", mime="text/csv")
-                    
-                    st.write("---")
-                    st.subheader("🗑️ Ledger Purge Console")
-                    delete_options = {f"ID {row['ID']} | {row['Description']} (₹{row['Amount']})": row['ID'] for _, row in df.iterrows()}
-                    selected_to_delete = st.selectbox("Select Target Entry to Remove", options=list(delete_options.keys()))
-                    
-                    st.markdown('<div class="delete-btn">', unsafe_allow_html=True)
-                    if st.button("Purge Entry From Database"):
-                        target_id = delete_options[selected_to_delete]
-                        if delete_expense_inline(target_id, current_user):
-                            st.success("Record successfully wiped from storage matrix.")
-                            st.rerun()
-                        else: st.error("Error executing purge logic.")
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    
-                with col2:
-                    st.subheader("Visual Matrix Analytics")
-                    cat_df = df.groupby('Category')['Amount'].sum().reset_index()
-                    fig = px.pie(cat_df, values='Amount', names='Category', hole=0.4,
-                                 color_discrete_sequence=['#22D3EE', '#34D399', '#60A5FA', '#A78BFA', '#F472B6'])
-                    fig.update_layout(margin=dict(l=20, r=20, t=20, b=20), paper_bgcolor='rgba(0,0,0,0)',
-                                      plot_bgcolor='rgba(0,0,0,0)', font_color='#E2E8F0', showlegend=True)
-                    st.plotly_chart(fig, use_container_width=True)
-            else: st.warning("No transaction elements match the filtered date paradigm.")
+                st.write("---")
+                st.subheader("🗑️ Ledger Purge Console")
+                delete_options = {f"ID {row['ID']} | {row['Description']} (₹{row['Amount']})": row['ID'] for _, row in df.iterrows()}
+                selected_to_delete = st.selectbox("Select Target Entry to Remove", options=list(delete_options.keys()))
+                
+                st.markdown('<div class="delete-btn">', unsafe_allow_html=True)
+                if st.button("Purge Entry From Database"):
+                    target_id = delete_options[selected_to_delete]
+                    if delete_expense_inline(target_id, current_user):
+                        st.success("Record successfully wiped from storage matrix.")
+                        st.rerun()
+                    else: st.error("Error executing purge logic.")
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+            with col2:
+                st.subheader("Visual Matrix Analytics")
+                cat_df = df.groupby('Category')['Amount'].sum().reset_index()
+                fig = px.pie(cat_df, values='Amount', names='Category', hole=0.4,
+                             color_discrete_sequence=['#22D3EE', '#34D399', '#60A5FA', '#A78BFA', '#F472B6'])
+                fig.update_layout(margin=dict(l=20, r=20, t=20, b=20), paper_bgcolor='rgba(0,0,0,0)',
+                                  plot_bgcolor='rgba(0,0,0,0)', font_color='#E2E8F0', showlegend=True)
+                st.plotly_chart(fig, use_container_width=True)
         else: st.info(f"Welcome Profile Account Agent! No database ledger available for this specific account profile yet.")
