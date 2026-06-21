@@ -306,22 +306,24 @@ else:
     
     show_welcome_banner(current_user)
     
-    col_h1, col_h2, col_h3 = st.columns([7, 3, 2])
+    col_h1, col_h2 = st.columns([7, 5])
     with col_h1:
         st.markdown(f'<div class="dashboard-title"><h2>📊 SpendAI Dashboard — {current_user}</h2></div>', unsafe_allow_html=True)
     with col_h2:
-        st.markdown('<div class="delete-btn">', unsafe_allow_html=True)
-        if st.button("🗑️ Delete Account"):
-            if purge_agent_complete(current_user):
+        col_btn1, col_btn2 = st.columns([1, 1])
+        with col_btn1:
+            st.markdown('<div class="delete-btn">', unsafe_allow_html=True)
+            if st.button("🗑️ Delete Account"):
+                if purge_agent_complete(current_user):
+                    st.session_state['authenticated'] = False
+                    st.session_state['username'] = ""
+                    st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+        with col_btn2:
+            if st.button("🚪 Logout"):
                 st.session_state['authenticated'] = False
                 st.session_state['username'] = ""
                 st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-    with col_h3:
-        if st.button("🚪 Logout"):
-            st.session_state['authenticated'] = False
-            st.session_state['username'] = ""
-            st.rerun()
 
     st.write("---")
     
